@@ -1,4 +1,3 @@
-from flask import Flask, request, redirect
 import requests
 import signal
 import os
@@ -7,7 +6,7 @@ import time
 import json
 import webbrowser
 
-import auth2
+import auth
 
 def make_api_request(access_token):
     egvs_url = "https://sandbox-api.dexcom.com/v2/users/self/egvs?startDate=2023-01-01T09:12:35&endDate=2023-01-02T09:12:35"
@@ -46,10 +45,10 @@ def main():
         x = read_json("temp.json")
         if x == False: # empty or doesnt exist
             print("Cached auth code does not exist (temp.json empty).") # temp.json is empty
-            auth2.get_access_token_flow()
+            auth.get_access_token_flow()
         elif x['expiration'] <= time.time()+100:  #Expired
             print("Getting Auth Code... (existing temp.json expired)")
-            auth2.get_access_token_flow()
+            auth.get_access_token_flow()
             print("HI")
     
         f = read_json("temp.json")
