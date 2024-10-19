@@ -5,9 +5,13 @@ import requests
 import webbrowser
 import threading
 import urllib.parse as urlparse
+import os
+from dotenv import load_dotenv
 
-client_id = 'j51MI1ODus0Ase002z0guXfFc4vLhxOU'
-client_secret = 'dnQefsGFBF8Z2lC6'
+load_dotenv("secret.env")
+client_id = os.getenv('CLIENT_ID')
+client_secret = os.getenv('CLIENT_SECRET')
+
 redirect_uri = 'http://localhost:8080/callback'  # Localhost redirect URI
 state_value = 'YOUR_STATE_VALUE'  # Optional, can be a random string
 
@@ -18,6 +22,8 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
         global inside_server
         inside_server = self.server
         global state
+        if state:
+            return
         parsed_url = urlparse.urlparse(self.path)
         query_params = urlparse.parse_qs(parsed_url.query)
         authorization_code = query_params.get('code')
@@ -27,7 +33,7 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
             access_token, refresh_token, expires_in = get_access_token(authorization_code[0])
             with open("temp.json", "w") as temp:
                 json.dump({'access_token': access_token, 'refresh_token': refresh_token, 'expiration': expires_in + time.time()}, temp)
-            print(f'Access Token Obtained')
+            print(f'Access Token Obtained: {access_token}')
 
             state = "Success"
             self.wfile.write(b'Authorization successful! You can close this window.')
@@ -51,7 +57,6 @@ def get_access_token(authorization_code):
     data = response.json()
 
     if response.status_code == 200:
-        print("Access Token obtained successfully.")
         return data['access_token'], data['refresh_token'], data['expires_in']
     else:
         print(f"Error obtaining access token: {data}")
@@ -73,7 +78,7 @@ def get_access_token_flow():
 
     # Wait for the server to process the request
     while True:
-        time.sleep(5)
+        time.sleep(5) #Check every 5 seconds if request is done and server can shut down.
         if state:
             inside_server.shutdown()
             break

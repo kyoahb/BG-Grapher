@@ -39,9 +39,9 @@ def read_json(file):
 def main():
     redo = True
     if read_json("data.json") != False: #Only ask if should reuse old data if data exists
-        redo = bool(input("Would you like to grab new data.json? "))
+        redo = input("Would you like to grab new data.json? ")
     
-    if redo:
+    if redo.lower() in ["true", "t", "y", "yes"]:
         x = read_json("temp.json")
         if x == False: # empty or doesnt exist
             print("Cached auth code does not exist (temp.json empty).") # temp.json is empty
