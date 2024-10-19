@@ -6,26 +6,12 @@ import time
 import json
 import webbrowser
 
-import auth
-
-def make_api_request(access_token):
-    egvs_url = "https://sandbox-api.dexcom.com/v2/users/self/egvs?startDate=2023-01-01T09:12:35&endDate=2023-01-02T09:12:35"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.get(egvs_url, headers=headers)
-    
-    if response.status_code == 200:
-        print("Data retrieved successfully:")
-        with open("data.json", "w") as f:
-            json.dump(response.json(), f)
-    else:
-        print(f"Error making API request: {response.status_code} - {response.text}")
+import dexcom
 
 def get_values():
-    with open("data.json", "r") as f:
-        data = json.loads(f.read())
-        values = [{i['value'] : i['systemTime']} for i in data['egvs']]
-        print(values)
+    data = read_json("data.json")
+    values = [{i['value'] : i['systemTime']} for i in data['egvs']]
+    print(values)
 
 def read_json(file):
     try:
@@ -35,24 +21,60 @@ def read_json(file):
     except:
         return False
 
+def custom_input(question:str, typ:type, values:list = None, lower:float = None, upper:float = None):
+    """Asks question to user, and checks that their response matches a given type / values / range
+
+    Args:
+        question (str): Asked to user
+        typ (type): Type the user must respond in
+        values (list, optional): Array of possible values the answer can be in. Defaults to None.
+        lower (float, optional): Lower bound of the answer. Defaults to None.
+        upper (float, optional): Lower bound of the answer. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+    invalid = True
+    while invalid:
+        ans = input(question)
+        try:
+            typ(ans)
+        except TypeError:
+            print(f"Invalid, answer must be of type {typ}.")
+            continue
+        if (upper != None and lower != None) and (typ == int or typ == float) and (values == None):
+            if typ(ans) > upper or typ(ans) < lower:
+                print(f"Invalid, answer must be between {lower} and {upper} (inclusive).")
+                continue
+        elif values != None:
+            if ans.lower() not in values:
+                print(f"Invalid, answer must be in {values}.")
+                continue
+        return typ(ans)
+
 # Main Workflow
 def main():
-    redo = True
-    if read_json("data.json") != False: #Only ask if should reuse old data if data exists
-        redo = input("Would you like to grab new data.json? ")
+    if read_json("data.json") != False: # Only ask to reuse old data if it exists
+        redo = custom_input("Should new data be fetched? ", str, ["yes", "no"])
     
-    if redo.lower() in ["true", "t", "y", "yes"]:
+    if redo == "yes":
+        fetch_temp = True
         x = read_json("temp.json")
-        if x == False: # empty or doesnt exist
+        if x == False: # Code does not exist
             print("Cached auth code does not exist (temp.json empty).") # temp.json is empty
-            auth.get_access_token_flow()
-        elif x['expiration'] <= time.time()+100:  #Expired
+            fetch_temp = True
+        elif x['expiration'] <= time.time()+100: #Code exists, but expired
             print("Getting Auth Code... (existing temp.json expired)")
-            auth.get_access_token_flow()
-            print("HI")
+            fetch_temp = True
+        else: # Code exists
+            s_fetch_temp = custom_input("Should a new access code be fetched? ", str, ["yes", "no"])
+            if s_fetch_temp == "no":
+                fetch_temp = False
+            else:
+                fetch_temp = True
     
-        f = read_json("temp.json")
-        make_api_request(f['access_token'])
+        dexcom.main(grab_auth=fetch_temp)
+        
     get_values()
 
 if __name__ == "__main__":
