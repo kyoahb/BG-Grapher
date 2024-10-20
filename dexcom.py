@@ -15,7 +15,6 @@ client_secret = os.getenv('CLIENT_SECRET')
 redirect_uri = 'http://localhost:8080/callback'  # Localhost redirect URI
 state_value = 'YOUR_STATE_VALUE'  # Optional, can be a random string
 
-state = ""
 inside_server = ""
 
 
@@ -56,8 +55,7 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
         global state (str): "Success"/"Fail" based on if authorization_code was received from request parameters
     """
     def do_GET(self):
-        global state
-        if state == "": # Check prevents unnecessary requests
+        if inside_server == "": # Check prevents unnecessary requests
             global inside_server
             inside_server = self.server
             
@@ -71,14 +69,10 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
                 with open("temp.json", "w") as temp:
                     json.dump({'access_token': access_token, 'refresh_token': refresh_token, 'expiration': expires_in + time.time()}, temp)
                 print(f'Access Token Obtained: {access_token}')
-
-                state = "Success"
-                self.wfile.write(b'Authorization successful! You can close this window.')
             else:
                 print("Error: Authorization code not found.")
-                state = "Fail"
-                self.wfile.write(b'Error: Authorization code not found.')
                 raise Exception("Error: Authorization code not found.")
+            threading.Thread(target=server_suicide).start()
 
 def run_server():
     """Runs server with modified OAuth2CallbackHandler class inside a thread. 
@@ -90,25 +84,24 @@ def run_server():
     print(f"Serving on http://{server_address[0]}:{server_address[1]}")
     httpd.serve_forever()
 
+def server_suicide():
+    global inside_server
+    inside_server.shutdown()
+
 def get_access_token_flow():
     """
     Starts server for callback handling, and opens link for user. 
-    Checks if callback is successful 1x per second, shuts down server if True.
     """
+    global inside_server
     server_thread = threading.Thread(target=run_server)
     server_thread.start()
     
     auth_url = f"https://sandbox-api.dexcom.com/v2/oauth2/login?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope=offline_access&state={state_value}"
     webbrowser.open(auth_url)
 
-    # Wait for the server to process the request
-    while True:
-        time.sleep(1) #Check every second if request is done and server can shut down.
-        if state:
-            inside_server.shutdown()
-            break
     server_thread.join()
     print("Server thread shut down")
+    inside_server = "" #Allows for same function to be reused by resetting server 
     return
 
 def make_api_request(iso_start : str, iso_end : str, access_token : str):
@@ -152,9 +145,8 @@ def read_json(file):
     except:
         return False
       
-def main(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:00", grab_auth:bool = True):
+def get_data(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:00"):
     """
-    Gets access_token if grab_auth is True.
     Requests glucose data between iso_start and iso_end using access_token.
 
     Args:
@@ -166,8 +158,6 @@ def main(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:
         Exception: If temp.json is empty or does not exist when trying to request glucose data.
     """
     #datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    if grab_auth:
-        get_access_token_flow()
     
     temp = read_json("temp.json")
     if not temp:
@@ -176,3 +166,7 @@ def main(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:
     access_token = temp['access_token']
     make_api_request(iso_start, iso_end, access_token) 
     return
+
+def token_and_data(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:00"):
+    get_access_token_flow()
+    get_data(iso_start, iso_end)

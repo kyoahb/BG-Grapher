@@ -10,8 +10,9 @@ import dexcom
 
 def get_values():
     data = read_json("data.json")
-    values = [{i['value'] : i['systemTime']} for i in data['egvs']]
-    print(values)
+    glucose_values = [i['value'] for i in data['egvs']]
+    times = [i['systemTime'] for i in data['egvs']]
+    return glucose_values, times
 
 def read_json(file):
     try:
@@ -79,3 +80,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
