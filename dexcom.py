@@ -7,6 +7,7 @@ import threading
 import urllib.parse as urlparse
 import os
 from dotenv import load_dotenv
+import funcs
 
 load_dotenv("secret.env")
 client_id = os.getenv('CLIENT_ID')
@@ -16,7 +17,6 @@ redirect_uri = 'http://localhost:8080/callback'  # Localhost redirect URI
 state_value = 'YOUR_STATE_VALUE'  # Optional, can be a random string
 
 inside_server = ""
-
 
 def get_access_token(authorization_code) -> list:
     """Makes access token request to server
@@ -55,8 +55,8 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
         global state (str): "Success"/"Fail" based on if authorization_code was received from request parameters
     """
     def do_GET(self):
+        global inside_server
         if inside_server == "": # Check prevents unnecessary requests
-            global inside_server
             inside_server = self.server
             
             parsed_url = urlparse.urlparse(self.path)
@@ -66,8 +66,7 @@ class OAuth2CallbackHandler(BaseHTTPRequestHandler):
             if authorization_code:
                 print(f'Authorization Code: {authorization_code[0]}')
                 access_token, refresh_token, expires_in = get_access_token(authorization_code[0])
-                with open("temp.json", "w") as temp:
-                    json.dump({'access_token': access_token, 'refresh_token': refresh_token, 'expiration': expires_in + time.time()}, temp)
+                funcs.write_to_settings(data={"temp" : {'access_token': access_token, 'refresh_token': refresh_token, 'expiration': expires_in + time.time()}})
                 print(f'Access Token Obtained: {access_token}')
             else:
                 print("Error: Authorization code not found.")
@@ -128,22 +127,6 @@ def make_api_request(iso_start : str, iso_end : str, access_token : str):
     else:
         print(f"Error making API request: {response.status_code} - {response.text}")
         raise Exception(f"Error making API request: {response.status_code} - {response.text}")
-  
-def read_json(file):
-    """Reads JSON file
-
-    Args:
-        file (str): file to read.
-
-    Returns:
-        dict OR False: dict in file, else False if file does not exist or is empty.
-    """
-    try:
-        with open(file, "r") as f:
-            x = json.loads(f.read())
-        return x
-    except:
-        return False
       
 def get_data(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:00"):
     """
@@ -159,14 +142,24 @@ def get_data(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00
     """
     #datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     
-    temp = read_json("temp.json")
-    if not temp:
-        raise Exception("temp.json empty -> dexcom.py cannot grab data")
+    temp = funcs.read_from_settings(keys=["temp"])
+    if temp in ["File does not exist", "Value(s) not found"]:
+        raise Exception("Settings does not contain temp -> dexcom.py cannot grab data")
     
-    access_token = temp['access_token']
+    access_token = temp["temp"]['access_token']
     make_api_request(iso_start, iso_end, access_token) 
     return
 
 def token_and_data(iso_start:str = "2023-01-01T00:00:00", iso_end:str = "2023-01-02T00:00:00"):
-    get_access_token_flow()
-    get_data(iso_start, iso_end)
+    token_data = funcs.read_from_settings(keys=["temp"])
+    print(iso_start, iso_end)
+    #if token_data does not exist, or is expired, get new access token
+    if token_data in ["File does not exist", "Value(s) not found"]:
+        get_access_token_flow()
+    elif token_data["temp"]['expiration'] <= time.time()+100:
+        get_access_token_flow()
+
+    get_data(iso_start, iso_end) # Uses temp to load data.json
+    if any(i == [] for i in funcs.get_xy_data()):
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, f"No data found between {iso_start.split('T')[0]} and {iso_end.split('T')[0]}", "Warning!", 16)
