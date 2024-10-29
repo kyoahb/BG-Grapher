@@ -2,3 +2,5 @@ secret.env
 data.json
 todo.txt
 settings.json
+t.py
+**/__pycache__
